@@ -27,8 +27,7 @@ def run_memory_comparison(df: pd.DataFrame, spacy_model_name: str = 'en_ob',
     
     print("FACT 1: Single shot WITHOUT memory zone (baseline)")
     single_start = time.time()
-    test_df = df.iloc[:min(batch_size * iterations, len(df))].copy()
-    result_single = predict_on_df(test_df, spacy_model_name=spacy_model_name, 
+    result_single = predict_on_df(df.copy(), spacy_model_name=spacy_model_name, 
                                  use_memory_zone=False, use_abc=False)
     single_time = time.time() - single_start
     
@@ -50,6 +49,7 @@ def run_memory_comparison(df: pd.DataFrame, spacy_model_name: str = 'en_ob',
     vocab_growth = []
     stringstore_growth = []
     
+    batches_processed = 0
     for i in range(iterations):
         start_idx = i * batch_size
         end_idx = min(start_idx + batch_size, len(df))
@@ -57,12 +57,10 @@ def run_memory_comparison(df: pd.DataFrame, spacy_model_name: str = 'en_ob',
             break
         
         batch_df = df.iloc[start_idx:end_idx]
-        texts = batch_df['clean_desc_memo'].fillna('').astype(str).tolist()
-        texts = [t for t in texts if t.strip()]
-        if texts:
-            docs = list(nlp_without.pipe(texts))
-            results = [(doc.text, [ent.text for ent in doc.ents]) for doc in docs]
-            del docs, results
+        result_batch = predict_on_df(batch_df, spacy_model=nlp_without, use_memory_zone=False, use_abc=False)
+        del result_batch
+        
+        batches_processed += 1
         
         if i % 10 == 0:
             current_memory = profiler.get_memory_mb()
@@ -100,20 +98,13 @@ def run_memory_comparison(df: pd.DataFrame, spacy_model_name: str = 'en_ob',
     vocab_growth_with = []
     stringstore_growth_with = []
     
-    for i in range(iterations):
+    for i in range(batches_processed):
         start_idx = i * batch_size
         end_idx = min(start_idx + batch_size, len(df))
-        if start_idx >= len(df):
-            break
         
         batch_df = df.iloc[start_idx:end_idx]
-        texts = batch_df['clean_desc_memo'].fillna('').astype(str).tolist()
-        texts = [t for t in texts if t.strip()]
-        if texts:
-            with nlp_with.memory_zone():
-                docs = list(nlp_with.pipe(texts))
-                results = [(doc.text, [ent.text for ent in doc.ents]) for doc in docs]
-                del docs, results
+        result_batch = predict_on_df(batch_df, spacy_model=nlp_with, use_memory_zone=True, use_abc=False)
+        del result_batch
         
         if i % 10 == 0:
             current_memory = profiler.get_memory_mb()
@@ -136,6 +127,7 @@ def run_memory_comparison(df: pd.DataFrame, spacy_model_name: str = 'en_ob',
     print(f"FINAL WITH ZONE: {batch_with_time:.2f}s, Memory={final_memory_with:.1f}MB (+{final_memory_with - initial_memory_with:.1f}MB), Vocab={final_vocab_with['vocab_size']} (+{final_vocab_with['vocab_size'] - initial_vocab_with['vocab_size']}), StringStore={final_vocab_with['string_store_size']}")
     
     print(f"\nEVIDENCE SUMMARY:")
+    print(f"Dataset size: {len(df)} records, Batches processed: {batches_processed}")
     print(f"Memory leak WITHOUT zone: +{final_memory_without - initial_memory:.1f}MB")
     print(f"Memory growth WITH zone: +{final_memory_with - initial_memory_with:.1f}MB")
     print(f"Memory savings: {(final_memory_without - initial_memory) - (final_memory_with - initial_memory_with):.1f}MB")
@@ -148,7 +140,7 @@ def run_memory_comparison(df: pd.DataFrame, spacy_model_name: str = 'en_ob',
         with open(report_path, 'w') as f:
             f.write(f"SPACY MEMORY LEAK EVIDENCE REPORT\n")
             f.write(f"Generated: {datetime.now()}\n")
-            f.write(f"Dataset: {len(df)} transactions, Batch size: {batch_size}, Iterations: {iterations}\n\n")
+            f.write(f"Dataset: {len(df)} transactions, Batches processed: {batches_processed}, Batch size: {batch_size}\n\n")
             
             f.write(f"FACT 1 - Single shot baseline:\n")
             f.write(f"Time: {single_time:.2f}s, Memory: {single_memory:.1f}MB, Vocab: {single_vocab['vocab_size']}, StringStore: {single_vocab['string_store_size']}\n\n")
@@ -172,7 +164,8 @@ def run_memory_comparison(df: pd.DataFrame, spacy_model_name: str = 'en_ob',
         'batch_with_time': batch_with_time, 'batch_with_memory_growth': final_memory_with - initial_memory_with,
         'memory_growth_timeline': memory_growth, 'memory_growth_with_timeline': memory_growth_with,
         'vocab_growth_timeline': vocab_growth, 'vocab_growth_with_timeline': vocab_growth_with,
-        'stringstore_growth_timeline': stringstore_growth, 'stringstore_growth_with_timeline': stringstore_growth_with
+        'stringstore_growth_timeline': stringstore_growth, 'stringstore_growth_with_timeline': stringstore_growth_with,
+        'batches_processed': batches_processed
     }
 
 def generate_memory_graphs(results_data: dict, output_path: str = ''):
