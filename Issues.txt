@@ -1,0 +1,22 @@
+ 1: Experimentation & Root Cause Analysis
+ * Title: 🔬 Spike: Identify Root Cause of NER Memory Consumption
+ * Description:
+   * Observation: The NER service shows continuous memory growth.
+   * Hypothesis: Potential causes include spaCy's internals, our custom post-processing logic, or other factors.
+   * Goal: Run experiments using various techniques to identify the definitive root cause of the high memory consumption.
+ * Acceptance Criteria:
+   * An experimentation script is created to test different hypotheses.
+   * The script can profile memory usage under various conditions (e.g., with/without memory zone, isolating different code paths).
+   * The script generates a visual graph report for analysis.
+   * A conclusive finding identifying the primary source(s) of the memory growth is documented. 2: Integrate Fix & Test in Databricks
+ * Title: Integrate Fix and Test NER Pipeline in Databricks
+ * Description:
+   * Context: Follow-up to the investigation in [Link to Ticket 1].
+   * Action: Implement the solution for the memory consumption issue based on the root cause identified in the previous spike.
+   * Goal: Integrate the approved fix into the main NER pipeline and validate its effectiveness in the Databricks environment.
+ * Acceptance Criteria:
+   * The specific code changes required to fix the identified issue from Ticket 1 are implemented.
+   * The updated NER pipeline is deployed and tested in the Databricks environment.
+   * Validation testing shows stable and flat memory usage over a large dataset.
+   * A final test report or graph from Databricks is attached as proof of the fix.
+   * Code is reviewed and merged.
