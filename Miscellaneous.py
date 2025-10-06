@@ -210,3 +210,73 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+def extract_results(self, docs, descriptions, memos):
+    """Optimized to minimize string object creation"""
+    
+    # Pre-extract entity data to minimize repeated attribute access
+    all_ents_data = []
+    for doc in docs:
+        doc_ents = [(ent.text, ent.label_, ent.ent_id_) for ent in doc.ents]
+        all_ents_data.append(doc_ents)
+    
+    entities = []
+    all_labels = []
+    all_extracted_texts = []
+    all_entity_ids = []
+    max_len = 0
+    
+    for ents_data, description, memo in zip(all_ents_data, descriptions, memos):
+        labels = []
+        extracted_texts = []
+        entity_ids = []
+        sub_entities_parts = []
+        
+        # Check IGNORE_ALL using tuple data
+        ignore_all_flag = any(label == "IGNORE_ALL" for _, label, _ in ents_data)
+        desc_memo = self.combine_desc_memo(desc=description, memo=memo)
+        
+        for ent_text, ent_label, ent_id in ents_data:
+            clean_ent = self.clean_ent(ent_text)
+            
+            if not self.is_valid_ent(ent_label, clean_ent, ignore_all_flag=ignore_all_flag):
+                continue
+            
+            labels.append(ent_label)
+            extracted_texts.append(clean_ent)
+            entity_ids.append(ent_id)
+            sub_entities_parts.append(f"{ent_text}-{ent_label}-{ent_id}| ")
+        
+        sub_entities = "".join(sub_entities_parts)
+        
+        # Regex logic
+        regex_flag = False
+        if len(labels) == 0:
+            regex_flag = True
+        else:
+            if ("PLATFORMS" in labels) and not("Business entity" in labels) and any(id in entity_ids for id in self.regex_filter_ent):
+                regex_flag = True
+            elif not any(label in labels for label in ["PLATFORMS", "PAYMENT PROCESSORS", "Business entity"]):
+                regex_flag = True
+        
+        if regex_flag:
+            text_ = self.apply_regex_patterns_if_no_business_entity(desc_memo, "", "")
+            clean_ent = self.clean_ent(text_)
+            if clean_ent:
+                extracted_texts.append(clean_ent)
+                labels.append("Business entity")
+                entity_ids.append("")
+                sub_entities += f"{clean_ent}-Business entity|| "
+        
+        max_len = max(max_len, len(labels))
+        entities.append(sub_entities)
+        all_labels.append(labels)
+        all_extracted_texts.append(extracted_texts)
+        all_entity_ids.append(entity_ids)
+    
+    return (entities, ) + (self.normalize_lengths(
+        max_len, ["", "", "", -1],
+        all_labels, all_extracted_texts, all_entity_ids
+    ))
