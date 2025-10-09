@@ -1,22 +1,101 @@
- 1: Experimentation & Root Cause Analysis
- * Title: 🔬 Spike: Identify Root Cause of NER Memory Consumption
- * Description:
-   * Observation: The NER service shows continuous memory growth.
-   * Hypothesis: Potential causes include spaCy's internals, our custom post-processing logic, or other factors.
-   * Goal: Run experiments using various techniques to identify the definitive root cause of the high memory consumption.
- * Acceptance Criteria:
-   * An experimentation script is created to test different hypotheses.
-   * The script can profile memory usage under various conditions (e.g., with/without memory zone, isolating different code paths).
-   * The script generates a visual graph report for analysis.
-   * A conclusive finding identifying the primary source(s) of the memory growth is documented. 2: Integrate Fix & Test in Databricks
- * Title: Integrate Fix and Test NER Pipeline in Databricks
- * Description:
-   * Context: Follow-up to the investigation in [Link to Ticket 1].
-   * Action: Implement the solution for the memory consumption issue based on the root cause identified in the previous spike.
-   * Goal: Integrate the approved fix into the main NER pipeline and validate its effectiveness in the Databricks environment.
- * Acceptance Criteria:
-   * The specific code changes required to fix the identified issue from Ticket 1 are implemented.
-   * The updated NER pipeline is deployed and tested in the Databricks environment.
-   * Validation testing shows stable and flat memory usage over a large dataset.
-   * A final test report or graph from Databricks is attached as proof of the fix.
-   * Code is reviewed and merged.
+import pandas as pd
+import json
+import glob
+import os
+
+# Configuration
+OUTPUT_DIR = "./output"
+COMPARISON_FOLDER = os.path.join(OUTPUT_DIR, "comparison")
+NUM_SAMPLES_PER_FILE = 3  # Number of sample rows to show per file
+
+# Get all comparison files
+comparison_files = sorted(glob.glob(os.path.join(COMPARISON_FOLDER, "comparison_part_*.csv")))
+
+print(f"Found {len(comparison_files)} comparison files\n")
+print("="*100)
+
+# Track statistics
+total_non_empty_without = 0
+total_non_empty_with = 0
+total_comparison_rows = 0
+
+for comp_file in comparison_files[:5]:  # Check first 5 files, adjust as needed
+    print(f"\n📁 FILE: {os.path.basename(comp_file)}")
+    print("="*100)
+    
+    # Read comparison file
+    df_comp = pd.read_csv(comp_file, low_memory=False)
+    total_comparison_rows += len(df_comp)
+    
+    # Find rows with non-empty JSON (not "[]" and not empty string)
+    df_comp['without_has_data'] = df_comp['without_zone_output'].apply(
+        lambda x: str(x) not in ['[]', '', 'nan', 'MISSING ROW', 'N/A']
+    )
+    df_comp['with_has_data'] = df_comp['with_zone_output'].apply(
+        lambda x: str(x) not in ['[]', '', 'nan', 'MISSING ROW', 'N/A']
+    )
+    
+    non_empty_rows = df_comp[df_comp['without_has_data'] | df_comp['with_has_data']]
+    
+    count_without = df_comp['without_has_data'].sum()
+    count_with = df_comp['with_has_data'].sum()
+    
+    total_non_empty_without += count_without
+    total_non_empty_with += count_with
+    
+    print(f"📊 Stats: Total rows={len(df_comp)}, Non-empty without_zone={count_without}, Non-empty with_zone={count_with}")
+    print(f"🎯 Match Status: {(df_comp['match_status']=='MATCH').sum()} MATCH, {(df_comp['match_status']=='MISMATCH').sum()} MISMATCH\n")
+    
+    # Sample rows with actual data
+    sample_rows = non_empty_rows.head(NUM_SAMPLES_PER_FILE)
+    
+    if len(sample_rows) == 0:
+        print("⚠️  No rows with data found in this file\n")
+        continue
+    
+    for idx, row in sample_rows.iterrows():
+        print(f"\n{'─'*100}")
+        print(f"ROW {row.get('row_number', idx)} | Status: {row['match_status']} | ID: {row.iloc[1]}")
+        print(f"{'─'*100}")
+        
+        # Parse and pretty print JSON
+        try:
+            without_json = json.loads(row['without_zone_output']) if isinstance(row['without_zone_output'], str) else row['without_zone_output']
+            without_str = json.dumps(without_json, indent=2, ensure_ascii=False)
+        except:
+            without_str = str(row['without_zone_output'])
+        
+        try:
+            with_json = json.loads(row['with_zone_output']) if isinstance(row['with_zone_output'], str) else row['with_zone_output']
+            with_str = json.dumps(with_json, indent=2, ensure_ascii=False)
+        except:
+            with_str = str(row['with_zone_output'])
+        
+        # Split into lines for side-by-side comparison
+        without_lines = without_str.split('\n')
+        with_lines = with_str.split('\n')
+        max_lines = max(len(without_lines), len(with_lines))
+        
+        print("\n🔵 WITHOUT ZONE" + " "*28 + "🟢 WITH ZONE")
+        print("─"*50 + "│" + "─"*49)
+        
+        for i in range(max_lines):
+            left = without_lines[i] if i < len(without_lines) else ""
+            right = with_lines[i] if i < len(with_lines) else ""
+            print(f"{left:<49}│ {right}")
+        
+        if row['match_status'] != 'MATCH':
+            print(f"\n💬 Comment: {row['comments']}")
+
+print("\n" + "="*100)
+print("📈 OVERALL STATISTICS")
+print("="*100)
+print(f"Total comparison rows checked: {total_comparison_rows:,}")
+print(f"Total non-empty without_zone outputs: {total_non_empty_without:,}")
+print(f"Total non-empty with_zone outputs: {total_non_empty_with:,}")
+print(f"Difference: {abs(total_non_empty_without - total_non_empty_with):,}")
+
+if total_non_empty_without == total_non_empty_with:
+    print("✅ Counts match!")
+else:
+    print("⚠️  Counts don't match - investigate further!")
