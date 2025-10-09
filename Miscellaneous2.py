@@ -1,5 +1,53 @@
 import json
 import os
+from pyspark.sql import SparkSession
+
+# Initialize Spark
+spark = SparkSession.builder.getOrCreate()
+
+# Load results
+OUTPUT_DIR = "./output"
+without_json_path = os.path.join(OUTPUT_DIR, "without_zone", "test_results.json")
+with_json_path = os.path.join(OUTPUT_DIR, "with_zone", "test_results.json")
+
+with open(without_json_path, 'r') as f:
+    results_without = json.load(f)
+
+with open(with_json_path, 'r') as f:
+    results_with = json.load(f)
+
+# Convert to DataFrame - Without Zone
+print("="*100)
+print("🔵 WITHOUT MEMORY ZONE")
+print("="*100)
+df_without = spark.createDataFrame([
+    {'batch': b, 'memory_mb': m, 'vocab_size': v, 'string_store_size': s}
+    for b, m, v, s in zip(
+        results_without['batches'],
+        results_without['memory_mb'],
+        results_without['vocab_size'],
+        results_without['string_store_size']
+    )
+])
+display(df_without)
+
+# Convert to DataFrame - With Zone
+print("\n" + "="*100)
+print("🟢 WITH MEMORY ZONE")
+print("="*100)
+df_with = spark.createDataFrame([
+    {'batch': b, 'memory_mb': m, 'vocab_size': v, 'string_store_size': s}
+    for b, m, v, s in zip(
+        results_with['batches'],
+        results_with['memory_mb'],
+        results_with['vocab_size'],
+        results_with['string_store_size']
+    )
+])
+display(df_with)
+
+import json
+import os
 import matplotlib.pyplot as plt
 
 # Load results
