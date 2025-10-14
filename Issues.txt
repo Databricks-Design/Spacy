@@ -1,3 +1,84 @@
+#!/usr/bin/env python3
+
+import json
+import os
+
+def load_results(folder_name):
+    """Load results.json from specified folder"""
+    path = os.path.join("./output", folder_name, "results.json")
+    with open(path, 'r') as f:
+        return json.load(f)
+
+def display_table(results, title):
+    """Display results as ASCII table"""
+    
+    # Baseline values
+    baseline_mem = 618.7
+    baseline_vocab = 1456
+    baseline_string = 639984
+    
+    # Get values
+    mem_list = results['memory_mb']
+    vocab_list = results['vocab_size']
+    string_list = results['string_store_size']
+    
+    # Batch 1 and Batch 12 values
+    batch1_mem = mem_list[0]
+    batch12_mem = mem_list[11]  # Index 11 = Batch 12
+    
+    batch1_vocab = vocab_list[0]
+    batch12_vocab = vocab_list[11]
+    
+    batch1_string = string_list[0]
+    batch12_string = string_list[11]
+    
+    # Total growth
+    mem_growth = batch12_mem - baseline_mem
+    vocab_growth = batch12_vocab - baseline_vocab
+    string_growth = batch12_string - baseline_string
+    
+    # Range [min, max] for first 12 batches
+    mem_range = [min(mem_list[:12]), max(mem_list[:12])]
+    vocab_range = [min(vocab_list[:12]), max(vocab_list[:12])]
+    string_range = [min(string_list[:12]), max(string_list[:12])]
+    
+    print(f"\n{'='*100}")
+    print(f"{title}")
+    print(f"{'='*100}")
+    
+    # Print table header
+    print(f"{'Metric':<20} {'Baseline':<15} {'Batch 1 (Start)':<20} {'Batch 12 (End)':<20} {'Total Growth':<25} {'Range [min,max]':<30}")
+    print(f"{'-'*100}")
+    
+    # Memory row
+    print(f"{'Memory (MB)':<20} {f'~{baseline_mem:.1f}':<15} {batch1_mem:<20.2f} {batch12_mem:<20.2f} {f'+{mem_growth:.1f}% (+{mem_growth:.2f} MB)':<25} {f'[{mem_range[0]:.2f}, {mem_range[1]:.2f}]':<30}")
+    
+    # Vocabulary row
+    print(f"{'Vocabulary Size':<20} {baseline_vocab:<15} {batch1_vocab:<20} {batch12_vocab:<20} {f'+{vocab_growth:,} (+{(vocab_growth/baseline_vocab*100):.1f}%)':<25} {f'[{vocab_range[0]:,}, {vocab_range[1]:,}]':<30}")
+    
+    # String Store row
+    print(f"{'String Store Size':<20} {baseline_string:<15} {batch1_string:<20,} {batch12_string:<20,} {f'+{string_growth:,} (+{(string_growth/baseline_string*100):.1f}%)':<25} {f'[{string_range[0]:,}, {string_range[1]:,}]':<30}")
+    
+    print(f"{'='*100}\n")
+
+def main():
+    # Load results from both folders
+    results_without = load_results("without_zone")
+    results_with = load_results("with_zone")
+    
+    # Display tables
+    display_table(results_without, "WITHOUT Memory Zone (Current Production Behaviour)")
+    display_table(results_with, "WITH Memory Zone (Proposed Solution)")
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+
 import pandas as pd
 import json
 import glob
